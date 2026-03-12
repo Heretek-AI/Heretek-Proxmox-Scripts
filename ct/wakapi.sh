@@ -34,7 +34,7 @@ function update_script() {
     systemctl stop wakapi
     msg_ok "Stopped Service"
 
-    msg_info "Backing up Configuration and data"
+    msg_info "Backing up Configuration and Data"
     cp /opt/wakapi/config.yml /tmp/wakapi_config_backup.yml 2>/dev/null || true
     msg_ok "Backed up Configuration"
 
