@@ -296,12 +296,23 @@ cd /opt/ragflow || exit
 git describe --tags --abbrev=0 > /opt/ragflow/version.txt 2>/dev/null || echo "v0.24.0" > /opt/ragflow/version.txt
 msg_ok "Cloned RAGFlow Repository"
 
+# Fix: Replace gitee.com graspologic dependency with GitHub version
+# RAGFlow's pyproject.toml references a gitee.com fork that requires authentication
+# We replace it with the GitHub mirror which is publicly accessible
+if grep -q "gitee.com/infiniflow/graspologic" pyproject.toml 2>/dev/null; then
+  msg_info "Replacing gitee.com graspologic dependency with GitHub version"
+  sed -i 's|gitee.com/infiniflow/graspologic|github.com/infiniflow/graspologic|g' pyproject.toml
+  msg_ok "Fixed graspologic dependency"
+fi
+
 # Install Python dependencies
 msg_info "Installing Python Dependencies"
 cd /opt/ragflow || exit
 export UV_SYSTEM_PYTHON=1
-$STD /usr/local/bin/uv sync --python 3.12
-$STD /usr/local/bin/uv run download_deps.py
+# Use --index-strategy unsafe-best-match to handle multiple PyPI indexes
+# and avoid dependency resolution issues with mirrors
+$STD /usr/local/bin/uv sync --python 3.12 --index-strategy unsafe-best-match
+$STD /usr/local/bin/uv run --index-strategy unsafe-best-match download_deps.py
 msg_ok "Installed Python Dependencies"
 
 # ==============================================================================
@@ -406,7 +417,7 @@ Environment=PYTHONPATH=/opt/ragflow
 Environment=LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/
 Environment=NLTK_DATA=/opt/ragflow/nltk_data
 ExecStartPre=/bin/sleep 10
-ExecStart=/usr/local/bin/uv run python api/ragflow_server.py
+ExecStart=/usr/local/bin/uv run --index-strategy unsafe-best-match python api/ragflow_server.py
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=300
@@ -430,7 +441,7 @@ WorkingDirectory=/opt/ragflow
 Environment=PYTHONPATH=/opt/ragflow
 Environment=LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/
 Environment=NLTK_DATA=/opt/ragflow/nltk_data
-ExecStart=/usr/local/bin/uv run python rag/svr/task_executor.py 0
+ExecStart=/usr/local/bin/uv run --index-strategy unsafe-best-match python rag/svr/task_executor.py 0
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=300
