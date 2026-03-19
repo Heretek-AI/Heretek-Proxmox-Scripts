@@ -272,7 +272,97 @@ msg_ok "MinIO Installed"
 # ==============================================================================
 
 msg_info "Downloading RAGFlow"
-fetch_and_deploy_gh_release "ragflow" "infiniflow/ragflow" "tarball" "latest" "/opt/ragflow"
+
+# Function to download RAGFlow directly from GitHub (bypasses API)
+download_ragflow_direct() {
+  local target_dir="/opt/ragflow"
+  local tmpdir
+  tmpdir=$(mktemp -d) || return 1
+
+  # Get latest release tag from GitHub redirects
+  local latest_tag=""
+  latest_tag=$(curl -fsSLI --connect-timeout 10 --max-time 30 "https://github.com/infiniflow/ragflow/releases/latest" 2>/dev/null | grep -i "location:" | tail -1 | sed 's/.*\/tag\/\([^ ]*\).*/\1/' | tr -d '\r\n')
+
+  if [[ -z "$latest_tag" ]]; then
+    msg_warn "Could not determine latest release tag, trying v0.17.0"
+    latest_tag="v0.17.0"
+  fi
+
+  msg_info "Found RAGFlow release: $latest_tag"
+
+  # Download tarball directly from GitHub
+  local tarball_url="https://github.com/infiniflow/ragflow/archive/refs/tags/${latest_tag}.tar.gz"
+  local filename="ragflow-${latest_tag}.tar.gz"
+
+  if ! curl -fsSL --connect-timeout 15 --max-time 600 -o "$tmpdir/$filename" "$tarball_url"; then
+    msg_error "Failed to download from $tarball_url"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+
+  # Extract
+  mkdir -p "$target_dir"
+  if [[ "${CLEAN_INSTALL:-0}" == "1" ]]; then
+    rm -rf "${target_dir:?}/"*
+  fi
+
+  tar --no-same-owner -xzf "$tmpdir/$filename" -C "$tmpdir" || {
+    msg_error "Failed to extract tarball"
+    rm -rf "$tmpdir"
+    return 1
+  }
+
+  # Find extracted directory and copy contents
+  local unpack_dir
+  unpack_dir=$(find "$tmpdir" -mindepth 1 -maxdepth 1 -type d | head -n1)
+
+  shopt -s dotglob nullglob
+  cp -r "$unpack_dir"/* "$target_dir/"
+  shopt -u dotglob nullglob
+
+  # Store version
+  local version="${latest_tag#v}"
+  echo "$version" > "$HOME/.ragflow"
+
+  rm -rf "$tmpdir"
+  return 0
+}
+
+# Try API-based download first, fall back to direct download
+DOWNLOAD_SUCCESS=false
+
+# Pre-check GitHub connectivity (both API and direct)
+if getent hosts api.github.com >/dev/null 2>&1 || getent hosts github.com >/dev/null 2>&1; then
+  # Try fetch_and_deploy_gh_release first (uses API)
+  if fetch_and_deploy_gh_release "ragflow" "infiniflow/ragflow" "tarball" "latest" "/opt/ragflow" 2>/dev/null; then
+    DOWNLOAD_SUCCESS=true
+  fi
+fi
+
+# If API method failed, try direct download
+if [[ "$DOWNLOAD_SUCCESS" != "true" ]]; then
+  msg_warn "GitHub API method failed, trying direct download..."
+  if download_ragflow_direct; then
+    DOWNLOAD_SUCCESS=true
+  fi
+fi
+
+# If both methods failed, show error
+if [[ "$DOWNLOAD_SUCCESS" != "true" ]]; then
+  msg_error "Failed to download RAGFlow from GitHub"
+  msg_error ""
+  msg_error "This could be due to:"
+  msg_error "  1. GitHub API rate limit exceeded (60 requests/hour for anonymous users)"
+  msg_error "  2. Network firewall blocking github.com"
+  msg_error "  3. DNS resolution issues in LXC container"
+  msg_error ""
+  msg_error "Solutions:"
+  msg_error "  1. Set GITHUB_TOKEN: export GITHUB_TOKEN='ghp_your_token_here'"
+  msg_error "  2. Check DNS: echo 'nameserver 8.8.8.8' >> /etc/resolv.conf"
+  msg_error "  3. Test connectivity: curl -sSL https://github.com/infiniflow/ragflow/releases/latest"
+  exit 1
+fi
+
 msg_ok "Downloaded RAGFlow"
 
 # ==============================================================================
@@ -417,6 +507,43 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 EOF
 
+# ==============================================================================
+# OPTIONAL: MCP SERVER SERVICE
+# ==============================================================================
+# The MCP (Model Context Protocol) server is optional and provides integration
+# with AI assistants like Claude Desktop. It runs on port 9382 by default.
+# To enable: systemctl enable --now ragflow-mcp.service
+
+msg_info "Creating Optional MCP Server Service"
+
+cat <<EOF >/etc/systemd/system/ragflow-mcp.service
+[Unit]
+Description=RAGFlow MCP Server (Model Context Protocol)
+After=network.target mariadb.service elasticsearch.service redis-server.service minio.service ragflow-server.service
+Requires=mariadb.service elasticsearch.service redis-server.service minio.service ragflow-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ragflow
+Environment=PYTHONPATH=/opt/ragflow
+Environment=LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/
+Environment=NLTK_DATA=/opt/ragflow/nltk_data
+ExecStartPre=/bin/sleep 15
+ExecStart=/usr/local/bin/uv run --index-strategy unsafe-best-match python mcp/server/server.py --host=0.0.0.0 --port=9382 --base-url=http://127.0.0.1:9380
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# MCP service is disabled by default - users must opt-in
+systemctl disable ragflow-mcp.service 2>/dev/null || true
+
+msg_ok "Created Optional MCP Server Service (disabled by default)"
+
 msg_ok "Created Systemd Services"
 
 # ==============================================================================
@@ -506,8 +633,18 @@ systemctl start ragflow-task-executor
 msg_ok "Started RAGFlow Services"
 
 # ==============================================================================
+# Reloading Nginx and services after installation
+# ==============================================================================
+
+msg_info "Reloading Nginx and Services"
+systemctl reload nginx
+systemctl restart nginx
+msg_ok "Reloaded Nginx"
+
+# ==============================================================================
 # FINALIZATION
 # ==============================================================================
+
 
 motd_ssh
 customize
@@ -538,3 +675,8 @@ echo -e "${TAB}- Configure your LLM API key in the web interface"
 echo -e "${TAB}- Default uses CPU for document processing"
 echo -e "${TAB}- For GPU acceleration, additional configuration required"
 echo -e "${TAB}- Elasticsearch may take 1-2 minutes to fully initialize"
+echo -e ""
+echo -e "${INFO}${YW} Optional MCP Server (for AI assistant integration):${CL}"
+echo -e "${TAB}- MCP endpoint: http://${LOCAL_IP}:9382"
+echo -e "${TAB}- Enable with: systemctl enable --now ragflow-mcp.service"
+echo -e "${TAB}- Requires RAGFlow API key from web interface"
