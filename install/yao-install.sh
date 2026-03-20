@@ -31,6 +31,8 @@ mkdir -p /opt/yao/agent
 mkdir -p /opt/yao/openapi
 mkdir -p /opt/yao/services
 mkdir -p /opt/yao/public
+mkdir -p /opt/yao/icons
+mkdir -p /opt/yao/public/.well-known
 msg_ok "Created Application Directory"
 
 msg_info "Creating Environment File"
@@ -40,20 +42,30 @@ YAO_STUDIO_PORT=5077
 EOF
 msg_ok "Created Environment File"
 
-msg_info "Creating Minimal Application Configuration"
-# Create a minimal app.yao - yao will create the database on first run
+msg_info "Creating Application Configuration"
 cat <<EOF >/opt/yao/app.yao
 {
-  "name": "yao-app",
+  "xgen": "1.0",
+  "name": "Yao Application",
+  "short": "Yao",
+  "description": "Yao Autonomous Agent Engine",
   "version": "1.0.0",
-  "description": "Yao Autonomous Agent Engine"
+  "adminRoot": "admin",
+  "menu": {
+    "process": "flows.app.menu",
+    "args": ["yao"]
+  },
+  "optional": {
+    "hideNotification": true,
+    "hideSetting": false
+  }
 }
 EOF
 msg_info "Creating Database Directory"
 mkdir -p /opt/yao/db
 msg_info "Creating Empty SQLite Database"
 sqlite3 /opt/yao/db/yao.db "VACUUM;" 2>/dev/null || touch /opt/yao/db/yao.db
-msg_ok "Created Minimal Application Configuration"
+msg_ok "Created Application Configuration"
 
 msg_info "Creating Agent Configuration"
 cat <<EOF >/opt/yao/agent/agent.yml
@@ -78,6 +90,21 @@ cat <<EOF >/opt/yao/openapi/openapi.yao
 }
 EOF
 msg_ok "Created OpenAPI Configuration"
+
+msg_info "Downloading Application Icons"
+curl -fsSL "https://raw.githubusercontent.com/YaoApp/yao-dev-app/main/icons/app.ico" -o /opt/yao/icons/app.ico
+curl -fsSL "https://raw.githubusercontent.com/YaoApp/yao-dev-app/main/icons/app.png" -o /opt/yao/icons/app.png
+msg_ok "Downloaded Application Icons"
+
+msg_info "Creating Well-Known Configuration"
+cat <<EOF >/opt/yao/public/.well-known/yao
+{
+  "name": "yao-app",
+  "version": "1.0.0",
+  "description": "Yao Autonomous Agent Engine"
+}
+EOF
+msg_ok "Created Well-Known Configuration"
 
 msg_info "Creating Public Web Interface"
 cat <<EOF >/opt/yao/public/index.html
