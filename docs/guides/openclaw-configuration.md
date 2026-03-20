@@ -341,6 +341,63 @@ openclaw doctor --generate-gateway-token
 openclaw gateway status
 ```
 
+## Installing Homebrew (Optional)
+
+If you need to install additional tools via Homebrew, follow these steps:
+
+### Prerequisites
+
+The `openclaw` user needs sudo access and a password set. By default, the user is created without a password.
+
+### Step 1: Set Password for openclaw User
+
+As root, set a password for the openclaw user:
+
+```bash
+passwd openclaw
+# Enter and confirm the new password
+```
+
+### Step 2: Install Homebrew
+
+Switch to the openclaw user and run the installer:
+
+```bash
+su - openclaw
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+When prompted:
+
+1. Enter the openclaw password for sudo access
+2. Press ENTER to continue when the installer shows the directories it will create
+
+### Step 3: Add Homebrew to PATH
+
+After installation, add Homebrew to your shell:
+
+```bash
+echo >> /home/openclaw/.bashrc
+echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv bash)"' >> /home/openclaw/.bashrc
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv bash)"
+```
+
+### Step 4: Verify Installation
+
+```bash
+brew --version
+```
+
+### Installing Packages
+
+Once Homebrew is installed, you can install packages:
+
+```bash
+brew install <package-name>
+```
+
+**Note:** Homebrew packages are installed to `/home/linuxbrew/.linuxbrew/` and are available to all users on the system.
+
 ## Additional Resources
 
 - [OpenClaw Gateway Documentation](https://docs.openclaw.ai/gateway)
