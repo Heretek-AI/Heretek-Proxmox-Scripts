@@ -154,32 +154,17 @@ chown caddy:caddy /var/log/caddy
 systemctl enable -q caddy
 msg_ok "Created Caddy HTTPS Reverse Proxy"
 
-msg_info "Creating OpenClaw Service"
-cat <<EOF >/etc/systemd/system/openclaw.service
-[Unit]
-Description=OpenClaw Gateway - Personal AI Assistant
-After=network.target network-online.target
-Wants=network-online.target
+msg_info "Enabling Lingering for OpenClaw User"
+# Enable lingering so user-level systemd services start on boot
+loginctl enable-linger openclaw 2>/dev/null || true
+msg_ok "Enabled Lingering"
 
-[Service]
-Type=simple
-User=openclaw
-Group=openclaw
-WorkingDirectory=/opt/openclaw
-Environment=NODE_ENV=production
-Environment=PATH=/home/openclaw/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/usr/bin/openclaw gateway --port 18789 --bind lan
-Restart=on-failure
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=openclaw
-
-[Install]
-WantedBy=multi-user.target
-EOF
-systemctl enable -q --now openclaw
-msg_ok "Created OpenClaw Service"
+msg_info "Initializing OpenClaw Gateway Service"
+# Run OpenClaw installer as the openclaw user to create user-level systemd service
+# The installer will prompt for hooks and create the service automatically
+export PATH="/home/openclaw/.npm-global/bin:$PATH"
+$run_user_cmd "openclaw install --no-hooks" 2>/dev/null || true
+msg_ok "Initialized OpenClaw Gateway Service"
 
 msg_info "Starting Caddy HTTPS Proxy"
 # Restart Caddy to apply configuration
