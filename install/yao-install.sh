@@ -42,9 +42,9 @@ cat <<EOF >/opt/yao/app.yao
   "description": "Yao Autonomous Agent Engine"
 }
 EOF
-# Create db directory and initialize empty SQLite database
+msg_info "Creating Database Directory"
 mkdir -p /opt/yao/db
-# Create empty SQLite database file that yao expects
+msg_info "Creating Empty SQLite Database"
 sqlite3 /opt/yao/db/yao.db "VACUUM;" 2>/dev/null || touch /opt/yao/db/yao.db
 msg_ok "Created Minimal Application Configuration"
 
