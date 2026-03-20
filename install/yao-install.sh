@@ -24,6 +24,11 @@ fetch_and_deploy_gh_release "yao" "YaoApp/yao" "singlefile" "latest" "/usr/local
 msg_info "Creating Application Directory"
 mkdir -p /opt/yao/data
 mkdir -p /opt/yao/etc
+mkdir -p /opt/yao/connectors
+mkdir -p /opt/yao/scripts
+mkdir -p /opt/yao/suis
+mkdir -p /opt/yao/agent
+mkdir -p /opt/yao/openapi
 msg_ok "Created Application Directory"
 
 msg_info "Creating Environment File"
@@ -47,6 +52,30 @@ mkdir -p /opt/yao/db
 msg_info "Creating Empty SQLite Database"
 sqlite3 /opt/yao/db/yao.db "VACUUM;" 2>/dev/null || touch /opt/yao/db/yao.db
 msg_ok "Created Minimal Application Configuration"
+
+msg_info "Creating Agent Configuration"
+cat <<EOF >/opt/yao/agent/agent.yml
+# Yao Agent Configuration
+# This is a minimal configuration file for the agent system
+version: "1.0"
+agents: []
+EOF
+msg_ok "Created Agent Configuration"
+
+msg_info "Creating OpenAPI Configuration"
+cat <<EOF >/opt/yao/openapi/openapi.yao
+// OpenAPI Configuration
+// This is a minimal configuration file for OpenAPI support
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Yao API",
+    "version": "1.0.0"
+  },
+  "paths": {}
+}
+EOF
+msg_ok "Created OpenAPI Configuration"
 
 msg_info "Creating Service"
 cat <<EOF >/etc/systemd/system/yao.service
