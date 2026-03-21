@@ -24,7 +24,8 @@ function update_script() {
   check_container_storage
   check_container_resources
 
-  if [[ ! -x /usr/bin/openclaw ]]; then
+  # Check if openclaw is installed (npm global bin location varies)
+  if ! command -v openclaw &>/dev/null; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi

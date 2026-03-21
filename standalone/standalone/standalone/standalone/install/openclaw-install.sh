@@ -56,22 +56,16 @@ if ! id -u openclaw &>/dev/null; then
 fi
 msg_ok "Created OpenClaw User"
 
-# Install Homebrew as the openclaw user
-msg_info "Installing Homebrew (as openclaw user)"
-# Homebrew requires a non-root user, so we install as openclaw
-su - openclaw -c '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"' << 'HOMEBREW_EOF'
-YES
-HOMEBREW_EOF
-
-# Add Homebrew to openclaw user's PATH
-if ! grep -q 'linuxbrew' /home/openclaw/.bashrc 2>/dev/null; then
-  echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/openclaw/.bashrc
-fi
-
-# Install ffmpeg via Homebrew for the openclaw user
-msg_info "Installing ffmpeg via Homebrew"
-su - openclaw -c 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" && brew install ffmpeg'
-msg_ok "Installed ffmpeg via Homebrew"
+# Configure npm to use user-writable directory for global packages
+msg_info "Configuring npm for User Packages"
+mkdir -p /home/openclaw/.npm-global
+chown -R openclaw:openclaw /home/openclaw/.npm-global
+# Set npm prefix for openclaw user to use home directory
+run_user_cmd="su - openclaw -c"
+$run_user_cmd "npm config set prefix /home/openclaw/.npm-global"
+# Add to PATH for openclaw user
+echo 'export PATH=/home/openclaw/.npm-global/bin:$PATH' >> /home/openclaw/.bashrc
+msg_ok "Configured npm for User Packages"
 
 msg_info "Installing OpenClaw"
 $STD npm install -g openclaw@latest
@@ -92,7 +86,7 @@ HOSTNAME_FQDN=$(hostname -f 2>/dev/null || hostname)
 cat <<EOF >/home/openclaw/.openclaw/openclaw.json
 {
   "gateway": {
-    "bind": "0.0.0.0",
+    "bind": "lan",
     "port": 18789,
     "controlUi": {
       "allowedOrigins": [
@@ -110,15 +104,33 @@ EOF
 chown openclaw:openclaw /home/openclaw/.openclaw/openclaw.json
 msg_ok "Created OpenClaw Configuration"
 
+msg_info "Creating Self-Signed Certificate for HTTPS"
+# Generate self-signed certificate with IP in SAN (Caddy's tls internal doesn't work with IPs)
+mkdir -p /etc/caddy/certs
+CONTAINER_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -1)
+HOSTNAME_FQDN=$(hostname -f 2>/dev/null || hostname)
+
+# Generate self-signed certificate valid for 365 days
+openssl req -x509 -newkey rsa:4096 -keyout /etc/caddy/certs/openclaw.key \
+  -out /etc/caddy/certs/openclaw.crt \
+  -days 365 -nodes \
+  -subj "/CN=openclaw-local" \
+  -addext "subjectAltName=IP:127.0.0.1,IP:${CONTAINER_IP},DNS:localhost,DNS:${HOSTNAME_FQDN}" 2>/dev/null
+
+# Set proper permissions
+chmod 644 /etc/caddy/certs/openclaw.crt
+chmod 600 /etc/caddy/certs/openclaw.key
+chown caddy:caddy /etc/caddy/certs/openclaw.crt /etc/caddy/certs/openclaw.key
+msg_ok "Created Self-Signed Certificate"
+
 msg_info "Creating Caddy HTTPS Reverse Proxy"
-# Create Caddyfile for HTTPS reverse proxy
-# Caddy will automatically generate self-signed certificates for local IPs
+# Create Caddyfile for HTTPS reverse proxy with explicit certificate paths
 cat <<EOF >/etc/caddy/Caddyfile
 # OpenClaw HTTPS Reverse Proxy
 # Access via https://<container-ip>:18790
 
 :18790 {
-    tls internal
+    tls /etc/caddy/certs/openclaw.crt /etc/caddy/certs/openclaw.key
     
     # Caddy automatically handles WebSocket upgrades
     reverse_proxy localhost:18789 {
@@ -155,8 +167,8 @@ User=openclaw
 Group=openclaw
 WorkingDirectory=/opt/openclaw
 Environment=NODE_ENV=production
-Environment=PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/usr/bin/openclaw gateway --port 18789 --bind 0.0.0.0
+Environment=PATH=/home/openclaw/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/openclaw gateway --port 18789 --bind lan
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal

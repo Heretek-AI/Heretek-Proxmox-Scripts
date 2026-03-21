@@ -38,14 +38,11 @@ $STD apt-get update
 $STD apt-get install -y caddy
 msg_ok "Installed Caddy"
 
-# Setup Node.js 22 (required by OpenClaw)
-NODE_VERSION="22" setup_nodejs
+# Setup Node.js 24 (recommended by OpenClaw)
+NODE_VERSION="24" setup_nodejs
 
-# Install uv (Python package manager)
-msg_info "Installing uv (Python Package Manager)"
-$STD curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$HOME/.local/bin:$PATH"
-msg_ok "Installed uv"
+# Install uv (Python package manager) - OpenClaw uses Python for some tools
+PYTHON_VERSION="3.12" setup_uv
 
 # Create unprivileged user for OpenClaw
 msg_info "Creating OpenClaw User"
