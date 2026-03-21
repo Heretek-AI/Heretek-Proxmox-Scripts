@@ -53,7 +53,7 @@ nano ~/.openclaw/openclaw.json
 Then restart:
 
 ```bash
-systemctl restart openclaw
+su - openclaw -c "systemctl --user restart openclaw-gateway"
 ```
 
 **Important:**
@@ -118,12 +118,8 @@ cat > ~/.openclaw/openclaw.json << EOF
 }
 EOF
 
-# Update service to use lan binding
-sed -i 's|--port 18789|--port 18789 --bind lan|' /etc/systemd/system/openclaw.service
-
 # Apply and restart
-systemctl daemon-reload
-systemctl restart openclaw
+su - openclaw -c "systemctl --user restart openclaw-gateway"
 ```
 
 **Note:** Even with `allowedOrigins` configured, you still need a secure context (HTTPS or localhost) for the device identity requirement. Use SSH tunneling for LAN access.
@@ -152,15 +148,16 @@ openclaw configure --section gateway
 
 # Set bind to "lan" when prompted
 # Then restart the service
-systemctl restart openclaw
+su - openclaw -c "systemctl --user restart openclaw-gateway"
 ```
 
 ### Method 2: Manual Configuration
 
-Edit both the configuration file and systemd service:
+Edit the configuration file:
 
 ```bash
-# Create/edit the configuration file
+# Edit as the openclaw user
+su - openclaw
 nano ~/.openclaw/openclaw.json
 ```
 
@@ -178,24 +175,10 @@ Add the configuration with your IP:
 }
 ```
 
-Then edit the systemd service:
-
-```bash
-nano /etc/systemd/system/openclaw.service
-```
-
-Modify the `ExecStart` line to include `--bind lan`:
-
-```ini
-[Service]
-ExecStart=/usr/bin/openclaw gateway --port 18789 --bind lan
-```
-
 Apply changes:
 
 ```bash
-systemctl daemon-reload
-systemctl restart openclaw
+systemctl --user restart openclaw-gateway
 ```
 
 ### Method 3: Quick Fix for Existing Installations
@@ -206,30 +189,26 @@ For existing installations, run these commands:
 # Get your container IP
 CONTAINER_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -1)
 
-# Create configuration with allowed origins
-mkdir -p ~/.openclaw
-cat > ~/.openclaw/openclaw.json << EOF
+# Create configuration with allowed origins (as openclaw user)
+su - openclaw -c "mkdir -p ~/.openclaw"
+su - openclaw -c "cat > ~/.openclaw/openclaw.json << EOF
 {
-  "gateway": {
-    "bind": "lan",
-    "port": 18789,
-    "controlUi": {
-      "allowedOrigins": [
-        "http://localhost:18789",
-        "http://127.0.0.1:18789",
-        "http://${CONTAINER_IP}:18789"
+  \"gateway\": {
+    \"bind\": \"lan\",
+    \"port\": 18789,
+    \"controlUi\": {
+      \"allowedOrigins\": [
+        \"http://localhost:18789\",
+        \"http://127.0.0.1:18789\",
+        \"http://${CONTAINER_IP}:18789\"
       ]
     }
   }
 }
-EOF
+EOF"
 
-# Update service to use lan binding
-sed -i 's|--port 18789|--port 18789 --bind lan|' /etc/systemd/system/openclaw.service
-
-# Apply and restart
-systemctl daemon-reload
-systemctl restart openclaw
+# Restart the service
+su - openclaw -c "systemctl --user restart openclaw-gateway"
 ```
 
 ### Method 4: Environment Variable
@@ -307,7 +286,7 @@ http://localhost:18789
    ```bash
    openclaw configure --section gateway
    # Set bind to "tailnet"
-   systemctl restart openclaw
+   su - openclaw -c "systemctl --user restart openclaw-gateway"
    ```
 
 3. Access via Tailscale IP: `http://<tailscale-ip>:18789`
@@ -317,12 +296,15 @@ http://localhost:18789
 ### Gateway Not Starting
 
 ```bash
-# Check logs
-journalctl -u openclaw -f
+# Check logs (as openclaw user)
+su - openclaw -c "journalctl --user -u openclaw-gateway -f"
+
+# Or from root
+journalctl --user -u openclaw-gateway -f --user-unit
 
 # Common issues:
 # - Port already in use: lsof -i :18789
-# - Permission denied: ensure running as root or correct user
+# - Permission denied: ensure running as correct user
 ```
 
 ### Cannot Connect from Remote

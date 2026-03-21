@@ -24,7 +24,8 @@ function update_script() {
   check_container_storage
   check_container_resources
 
-  if [[ ! -x /usr/bin/openclaw ]]; then
+  # Check if openclaw is installed (npm global bin location varies)
+  if ! command -v openclaw &>/dev/null; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
@@ -48,12 +49,12 @@ function update_script() {
   msg_info "Updating OpenClaw from v${CURRENT_VERSION} to v${LATEST_VERSION}"
   
   msg_info "Stopping Service"
-  systemctl stop openclaw
+  su - openclaw -c "systemctl --user stop openclaw-gateway" 2>/dev/null || true
   msg_ok "Stopped Service"
 
   msg_info "Backing up Configuration"
-  if [[ -d /root/.openclaw ]]; then
-    cp -r /root/.openclaw /tmp/openclaw_backup
+  if [[ -d /home/openclaw/.openclaw ]]; then
+    cp -r /home/openclaw/.openclaw /tmp/openclaw_backup
   fi
   msg_ok "Backed up Configuration"
 
@@ -63,13 +64,14 @@ function update_script() {
 
   msg_info "Restoring Configuration"
   if [[ -d /tmp/openclaw_backup ]]; then
-    cp -r /tmp/openclaw_backup/. /root/.openclaw 2>/dev/null || true
+    cp -r /tmp/openclaw_backup/. /home/openclaw/.openclaw 2>/dev/null || true
     rm -rf /tmp/openclaw_backup
   fi
+  chown -R openclaw:openclaw /home/openclaw/.openclaw 2>/dev/null || true
   msg_ok "Restored Configuration"
 
   msg_info "Starting Service"
-  systemctl start openclaw
+  su - openclaw -c "systemctl --user start openclaw-gateway" 2>/dev/null || true
   msg_ok "Started Service"
   
   msg_ok "Updated successfully to v${LATEST_VERSION}!"
